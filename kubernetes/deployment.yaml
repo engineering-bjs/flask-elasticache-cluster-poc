@@ -1,0 +1,80 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: flask-redis-cluster-poc
+  namespace: development
+  labels:
+    app: flask-redis-cluster-poc
+    app.kubernetes.io/instance: flask-redis-cluster-poc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flask-redis-cluster-poc
+      app.kubernetes.io/instance: flask-redis-cluster-poc
+  template:
+    metadata:
+      labels:
+        app: flask-redis-cluster-poc
+        app.kubernetes.io/instance: flask-redis-cluster-poc
+      annotations:
+        date/deploy-date: '{{ now | quote }}'
+        proxy.istio.io/config: '{ "holdApplicationUntilProxyStarts": true }'
+        traffic.sidecar.istio.io/excludeOutboundIPRanges: 0.0.0.0/0
+    spec:
+      containers:
+        - name: flask-redis-cluster-poc
+          image: docker.io/anishdhanka/flask-elasticache-cluster-poc:1.0.0
+          env:
+            - name: REDIS_HOST_1
+              value: "XXXXX"
+            - name: REDIS_HOST_2
+              value: "XXXXX"
+            - name: REDIS_HOST_3
+              value: "XXXXX"
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 200m
+            requests:
+              cpu: 100m
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - sh
+                  - '-c'
+                  - >-
+                    sleep 30;curl -X POST
+                    http://localhost:15000/healthcheck/fail;sleep 45;curl -X
+                    POST http://localhost:15000/healthcheck/ok;
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: Always
+          securityContext: {}
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 120
+      dnsPolicy: ClusterFirst
+      serviceAccountName: default
+      serviceAccount: default
+      securityContext: {}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: alpha.eksctl.io/nodegroup-name
+                    operator: In
+                    values:
+                      - spot-instance-nodes
+      schedulerName: default-scheduler
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+  revisionHistoryLimit: 5
+  progressDeadlineSeconds: 600
